@@ -1,0 +1,12 @@
+{
+  "name": "unity-control-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unity 互动程序远程控制 - 云中继服务（可部署到 Render）",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
