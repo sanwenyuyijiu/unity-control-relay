@@ -1,0 +1,20 @@
+# render.yaml — Render Blueprint（部署蓝图）
+#
+# 有了这个文件，在 Render 上部署时无需手工填写任何构建参数：
+# Render 会自动读取本文件，自动创建服务、自动装依赖、自动启动。
+#
+# 使用方式：Render 控制台 → New → Blueprint → 选中本仓库 → Apply
+#
+services:
+  - type: web
+    name: unity-control-relay
+    runtime: node
+    plan: free                # 免费版（15 分钟无访问会休眠，现场客户端心跳可缓解）
+    region: singapore         # 新加坡节点，国内访问延迟最低
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /        # 健康检查打首页，同时可减少休眠
+    autoDeploy: true          # 推送到 GitHub 主分支后自动重新部署
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
