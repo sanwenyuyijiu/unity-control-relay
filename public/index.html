@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>互动程序控制台</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6fa;
+    min-height: 100vh;
+    padding: 20px 16px 40px;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .header h1 { font-size: 20px; color: #1a1a2e; }
+  .status-badge {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: #e8e8e8;
+    color: #666;
+    white-space: nowrap;
+  }
+  .status-badge.online { background: #e6f7ec; color: #0a8f3c; }
+  .status-badge.offline { background: #fdecea; color: #d64541; }
+  .scene-list { display: flex; flex-direction: column; gap: 12px; }
+  .scene-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .scene-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #f0f0f0;
+  }
+  .scene-info { flex: 1; min-width: 0; }
+  .scene-info .name { font-size: 16px; font-weight: 600; color: #1a1a2e; }
+  .scene-info .desc { font-size: 12px; color: #888; margin-top: 2px; }
+  .btn {
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: #07c160;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; }
+  .scene-status {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: #f0f0f0;
+    color: #999;
+    margin-bottom: 4px;
+    display: inline-block;
+  }
+  .scene-status.running { background: #e6f7ec; color: #0a8f3c; }
+  .toast {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.75);
+    color: #fff;
+    padding: 14px 22px;
+    border-radius: 12px;
+    font-size: 14px;
+    display: none;
+    z-index: 99;
+    max-width: 80vw;
+    text-align: center;
+  }
+  .hint {
+    margin-top: 24px;
+    text-align: center;
+    font-size: 12px;
+    color: #aaa;
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>互动程序控制台</h1>
+    <div class="status-badge" id="deviceStatus">设备检测中…</div>
+  </div>
+
+  <div class="scene-list" id="sceneList"></div>
+  <div class="hint">点「启动」后，现场电脑会自动打开对应的程序。<br>再次点其他程序，会自动先关闭当前程序。<br>本页面本地/云端通用（ws://localhost:3000/ws 或 wss://你的域名/ws）</div>
+  <div class="toast" id="toast"></div>
+
+<script>
+// ===== 程序清单（与 Unity 侧 CommandReceiver.cs 的 sceneMap 保持一致）=====
+const SCENES = [
+  { id: "1", name: "互动A", desc: "互动小鸟", img: "images/thumb-a.jpg" },
+  { id: "2", name: "互动B", desc: "呼风唤雨", img: "images/thumb-b.jpg" },
+  { id: "3", name: "互动C", desc: "梦想垂钓", img: "images/thumb-c.jpg" },
+];
+const DEVICE_ID = "1";
+
+// ===== 渲染列表 =====
+const listEl = document.getElementById("sceneList");
+const statusEl = document.getElementById("deviceStatus");
+const toastEl = document.getElementById("toast");
+
+SCENES.forEach((s) => {
+  const card = document.createElement("div");
+  card.className = "scene-card";
+  card.innerHTML = `
+    <img class="scene-icon" src="${s.img}" alt="${s.name}">
+    <div class="scene-info">
+      <div class="name">${s.name}</div>
+      <div class="desc">${s.desc}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="scene-status" data-status="${s.id}">未运行</div>
+      <button class="btn" data-id="${s.id}">启动</button>
+    </div>`;
+  card.querySelector(".btn").addEventListener("click", () => sendStart(s.id));
+  listEl.appendChild(card);
+});
+
+// ===== WebSocket 连接 =====
+let ws = null;
+let reconnectTimer = null;
+
+function connect() {
+  // 自适应地址：本地 ws://localhost:3000/ws；云端(Render)自动 wss://<域名>/ws
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const url = `${proto}//${location.host || "localhost:3000"}/ws`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    setStatus(true);
+    console.log("[H5] 已连接中继");
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "status") setStatus(msg.deviceOnline);
+      if (msg.type === "programStatus") setRunning(msg.running);
+      if (msg.type === "done") {
+        const scene = SCENES.find((s) => s.id === msg.sceneId);
+        const name = scene ? scene.name : "程序 " + msg.sceneId;
+        if (msg.ok) showToast(`✅ 已启动「${name}」`);
+        else showToast(`❌ 启动「${name}」失败：${(msg.error || "").split("\n")[0]}`);
+      }
+      if (msg.type === "ack" && msg.ok === false) {
+        showToast("设备离线，命令未送达");
+      }
+    } catch {}
+  };
+
+  ws.onclose = () => {
+    setStatus(false);
+    reconnectTimer = setTimeout(connect, 3000); // 自动重连
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+function setStatus(online) {
+  statusEl.textContent = online ? "设备在线" : "设备离线";
+  statusEl.className = "status-badge " + (online ? "online" : "offline");
+}
+
+// 更新各程序卡片的运行状态
+function setRunning(runningId) {
+  document.querySelectorAll(".scene-status").forEach((el) => {
+    const isRunning = el.dataset.status === runningId;
+    el.textContent = isRunning ? "运行中" : "未运行";
+    el.className = "scene-status" + (isRunning ? " running" : "");
+  });
+}
+
+// ===== 发送启动命令 =====
+function sendStart(sceneId) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    showToast("未连接到中继，请确认 server.js 已启动");
+    return;
+  }
+  ws.send(JSON.stringify({ type: "start", deviceId: DEVICE_ID, sceneId }));
+  showToast(`已发送「${SCENES.find((s) => s.id === sceneId).name}」`);
+}
+
+// ===== Toast =====
+let toastTimer = null;
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.style.display = "none"; }, 2000);
+}
+
+connect();
+</script>
+</body>
+</html>
