@@ -1,0 +1,15 @@
+{
+  "说明": "程序 ID ↔ exe 路径映射。网页点「启动」→ 本地客户端读取此文件 → 启动对应 exe。exe 路径用正斜杠 / 或双反斜杠 \\\\。把下面每个程序的 exe 改成你 Unity 打包输出的真实路径即可。测试可用 local-test/programs/ 下的假 exe（fakeA.exe / fakeB.exe）。",
+  "1": {
+    "name": "互动A",
+    "exe": "F:/Bird/bird.exe"
+  },
+  "2": {
+    "name": "互动B",
+    "exe": "F:/Dust/dust.exe"
+  },
+  "3": {
+    "name": "互动C",
+    "exe": "F:/Fish/fish.exe"
+  }
+}
