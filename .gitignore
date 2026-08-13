@@ -1,0 +1,14 @@
+# 依赖（Render 会自动 npm install）
+node_modules/
+
+# Unity 打包产物（体积大，不要进仓库）
+*.exe
+programs/
+
+# 本地生成的临时/辅助文件
+phone_qr.png
+*.log
+.DS_Store
+
+# 以下为部署到 Render 时不需要的本地测试文件，可忽略
+# start-all.bat / mock-unity.js 仅本地测试用，不影响云端运行
