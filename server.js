@@ -1,36 +1,23 @@
 /**
- * server.js — Unity 互动程序「云中继服务」
+ * server.js — 云端单端口中继（HTTP + WS 同端口，已加 HTTP 轮询兜底 API）
  *
- * 作用（本地测试时扮演最终架构里的云服务器；也可直接部署到 Render）：
- *   1. HTTP 服务：托管 H5 触发页 public/index.html
- *   2. WS 中继  ：接收浏览器发来的启动命令，转发给现场客户端
+ * 端口：process.env.PORT || 8080
+ * WS   ：ws://<host>:<port>/ws
+ * 静态 ：public/index.html 等
+ * API  ：
+ *   GET  /api/status        -> {"deviceOnline":bool,"running":"1"|null}
+ *   POST /api/start         -> body {"deviceId":"1","sceneId":"1"} -> {"ok":bool,"error":...}
  *
- * 端口说明（兼容本地与云端）：
- *   - 本地：http://localhost:3000  + ws://localhost:3000/ws
- *   - 云端(Render)：Render 注入 process.env.PORT，且自动 HTTPS
- *                   → https://<你的服务>.onrender.com  + wss://<你的服务>.onrender.com/ws
- *   - HTTP 与 WS 共用同一个端口，WS 走 /ws 路径（Render 只暴露一个端口）
- *
- * 消息协议（与最终云方案一致，迁移无需改代码）：
- *   浏览器  --> server : { type:"start", deviceId:"1", sceneId:"1" }
- *   server  --> 客户端 : { type:"start", sceneId:"1" }
- *   客户端  --> server : { type:"hello", role:"device", deviceId:"1" }
- *   客户端  --> server : { type:"ping" }   // 心跳，防 Render 免费版休眠
- *
- * 启动：node server.js   （或 npm start）
- * 依赖：npm install ws
+ * 这样即使手机浏览器/网络不支持 WebSocket，也能用 HTTP 轮询保持在线与控制。
  */
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
 
-// Render 注入 PORT；本地默认 3000（HTTP 与 WS 共用一个端口）
-const PORT = process.env.PORT || 3000;
-const WS_PATH = "/ws";
+const PORT = process.env.PORT || 8080;
 const PUBLIC_DIR = path.join(__dirname, "public");
 
-// ---------- 1. HTTP 静态服务（同时承载 H5 页面与 WS 升级）----------
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -41,62 +28,26 @@ const mime = {
   ".webp": "image/webp",
 };
 
-const httpServer = http.createServer((req, res) => {
-  const urlPath = req.url.split("?")[0];
-  const filePath = path.join(PUBLIC_DIR, urlPath === "/" ? "index.html" : urlPath);
-  if (!filePath.startsWith(PUBLIC_DIR)) {
-    res.writeHead(403);
-    res.end("Forbidden");
-    return;
-  }
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(404);
-      res.end("Not Found");
-      return;
-    }
-    res.writeHead(200, { "Content-Type": mime[path.extname(filePath)] || "application/octet-stream" });
-    res.end(data);
-  });
-});
-
-// ---------- 2. WS 中继（挂在同一 HTTP 服务上，路径 /ws）----------
-const wss = new WebSocketServer({ server: httpServer, path: WS_PATH });
-const deviceClients = new Set(); // 现场客户端连接
+const deviceClients = new Set(); // 现场客户端 / ESP32 连接
 let currentProgram = null;       // 当前现场正在运行的程序 ID
 
-wss.on("connection", (ws) => {
-  ws.isDevice = false;
+const server = http.createServer((req, res) => {
+  const urlPath = req.url.split("?")[0];
 
-  // 新连接补发当前程序运行状态（浏览器用；设备端会忽略）
-  if (currentProgram) {
-    ws.send(JSON.stringify({ type: "programStatus", running: currentProgram }));
+  // ---------- API：状态查询（HTTP 轮询兜底）----------
+  if (urlPath === "/api/status" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ deviceOnline: deviceClients.size > 0, running: currentProgram }));
+    return;
   }
 
-  ws.on("message", (raw) => {
-    let msg;
-    try {
-      msg = JSON.parse(raw.toString());
-    } catch {
-      return;
-    }
-
-    // 心跳：来自现场客户端或浏览器的 ping，仅用于保持 Render 不休眠，忽略即可
-    if (msg.type === "ping") return;
-
-    // 客户端注册为"现场设备"
-    if (msg.type === "hello" && msg.role === "device") {
-      ws.isDevice = true;
-      ws.deviceId = msg.deviceId || "1";
-      deviceClients.add(ws);
-      console.log(`[WS] 现场客户端上线 deviceId=${ws.deviceId}，当前在线设备数=${deviceClients.size}`);
-      broadcastToBrowsers({ type: "status", deviceOnline: true });
-      return;
-    }
-
-    // 浏览器发起启动命令
-    if (msg.type === "start") {
-      console.log(`[WS] 收到启动命令 sceneId=${msg.sceneId} deviceId=${msg.deviceId}`);
+  // ---------- API：启动命令（HTTP 兜底）----------
+  if (urlPath === "/api/start" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      let msg;
+      try { msg = JSON.parse(body); } catch { msg = {}; }
       const target = msg.deviceId || "1";
       let sent = false;
       for (const c of deviceClients) {
@@ -105,13 +56,65 @@ wss.on("connection", (ws) => {
           sent = true;
         }
       }
-      // 回复浏览器：设备是否在线
-      ws.send(JSON.stringify({ type: "ack", ok: sent, sceneId: msg.sceneId }));
-      if (!sent) console.log("[WS] 警告：没有找到在线的现场客户端");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: sent, error: sent ? null : "设备离线，命令未送达" }));
+    });
+    return;
+  }
+
+  // ---------- 静态文件 ----------
+  const filePath = path.join(PUBLIC_DIR, urlPath === "/" ? "index.html" : urlPath);
+  if (!filePath.startsWith(PUBLIC_DIR)) {
+    res.writeHead(403); res.end("Forbidden"); return;
+  }
+  fs.readFile(filePath, (err, data) => {
+    if (err) { res.writeHead(404); res.end("Not Found"); return; }
+    res.writeHead(200, { "Content-Type": mime[path.extname(filePath)] || "application/octet-stream" });
+    res.end(data);
+  });
+});
+
+// ---------- WS 中继（同端口，路径 /ws）----------
+const wss = new WebSocketServer({ server, path: "/ws" });
+
+wss.on("connection", (ws) => {
+  ws.isDevice = false;
+
+  // 新连接立即补发当前状态
+  ws.send(JSON.stringify({ type: "programStatus", running: currentProgram }));
+  if (deviceClients.size > 0) ws.send(JSON.stringify({ type: "status", deviceOnline: true }));
+
+  ws.on("message", (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw.toString()); } catch { return; }
+
+    // 现场设备注册
+    if (msg.type === "hello" && msg.role === "device") {
+      ws.isDevice = true;
+      ws.deviceId = msg.deviceId || "1";
+      deviceClients.add(ws);
+      console.log(`[WS] 现场客户端上线 deviceId=${ws.deviceId}，在线数=${deviceClients.size}`);
+      broadcastToBrowsers({ type: "status", deviceOnline: true });
+      ws.send(JSON.stringify({ type: "programStatus", running: currentProgram }));
       return;
     }
 
-    // 设备端上报程序运行状态 → 广播给所有浏览器
+    // 浏览器启动命令
+    if (msg.type === "start") {
+      const target = msg.deviceId || "1";
+      let sent = false;
+      for (const c of deviceClients) {
+        if (c.deviceId === target) {
+          c.send(JSON.stringify({ type: "start", sceneId: msg.sceneId }));
+          sent = true;
+        }
+      }
+      ws.send(JSON.stringify({ type: "ack", ok: sent, sceneId: msg.sceneId }));
+      if (!sent) console.log("[WS] 警告：没有在线的现场客户端");
+      return;
+    }
+
+    // 设备上报运行状态
     if (msg.type === "programStatus") {
       currentProgram = msg.running || null;
       console.log(`[WS] 当前运行程序：${currentProgram || "（无）"}`);
@@ -119,38 +122,28 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // 设备端回执（可选，打印日志用）
+    // 设备回执
     if (msg.type === "done") {
-      if (msg.ok) {
-        console.log(`[WS] 现场客户端已启动程序 ${msg.sceneId}`);
-      } else {
-        console.log(`[WS] 现场客户端启动程序 ${msg.sceneId} 失败：${msg.error || "未知原因"}`);
-      }
       broadcastToBrowsers({ type: "done", sceneId: msg.sceneId, ok: msg.ok, error: msg.error });
     }
   });
 
   ws.on("close", () => {
-    deviceClients.delete(ws);
     if (ws.isDevice) {
-      console.log("[WS] 现场客户端离线");
+      deviceClients.delete(ws);
+      console.log(`[WS] 现场客户端离线，在线数=${deviceClients.size}`);
       broadcastToBrowsers({ type: "status", deviceOnline: deviceClients.size > 0 });
     }
   });
-
   ws.on("error", () => {});
 });
 
 function broadcastToBrowsers(msg) {
   for (const c of wss.clients) {
-    if (!c.isDevice && c.readyState === c.OPEN) {
-      c.send(JSON.stringify(msg));
-    }
+    if (!c.isDevice && c.readyState === c.OPEN) c.send(JSON.stringify(msg));
   }
 }
 
-httpServer.listen(PORT, () => {
-  const base = process.env.PORT ? `https://<你的服务>.onrender.com` : `http://localhost:${PORT}`;
-  console.log(`[HTTP] H5 页面: ${base}`);
-  console.log(`[WS]   中继地址: ${base}${WS_PATH}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`[云中继] 已启动：http://0.0.0.0:${PORT}  （WebSocket 路径 /ws，状态API /api/status）`);
 });
