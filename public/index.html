@@ -6,95 +6,26 @@
 <title>互动程序控制台</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: #f5f6fa;
-    min-height: 100vh;
-    padding: 20px 16px 40px;
-  }
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 18px;
-  }
-  .header h1 { font-size: 20px; color: #1a1a2e; }
-  .status-badge {
-    font-size: 12px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    background: #e8e8e8;
-    color: #666;
-    white-space: nowrap;
-  }
-  .status-badge.online { background: #e6f7ec; color: #0a8f3c; }
-  .status-badge.offline { background: #fdecea; color: #d64541; }
-  .scene-list { display: flex; flex-direction: column; gap: 12px; }
-  .scene-card {
-    background: #fff;
-    border-radius: 14px;
-    padding: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .scene-icon {
-    width: 48px; height: 48px;
-    border-radius: 12px;
-    object-fit: cover;
-    flex-shrink: 0;
-    background: #f0f0f0;
-  }
-  .scene-info { flex: 1; min-width: 0; }
-  .scene-info .name { font-size: 16px; font-weight: 600; color: #1a1a2e; }
-  .scene-info .desc { font-size: 12px; color: #888; margin-top: 2px; }
-  .btn {
-    border: none;
-    border-radius: 10px;
-    padding: 10px 16px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #fff;
-    background: #07c160;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: opacity 0.15s;
-  }
-  .btn:active { opacity: 0.7; }
-  .btn:disabled { background: #ccc; cursor: not-allowed; }
-  .scene-status {
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 12px;
-    background: #f0f0f0;
-    color: #999;
-    margin-bottom: 4px;
-    display: inline-block;
-  }
-  .scene-status.running { background: #e6f7ec; color: #0a8f3c; }
-  .toast {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0,0,0,0.75);
-    color: #fff;
-    padding: 14px 22px;
-    border-radius: 12px;
-    font-size: 14px;
-    display: none;
-    z-index: 99;
-    max-width: 80vw;
-    text-align: center;
-  }
-  .hint {
-    margin-top: 24px;
-    text-align: center;
-    font-size: 12px;
-    color: #aaa;
-    line-height: 1.7;
-  }
+  body { font-family: -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f5f6fa; min-height:100vh; padding:20px 16px 40px; }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .header h1 { font-size:20px; color:#1a1a2e; }
+  .status-badge { font-size:12px; padding:4px 10px; border-radius:20px; background:#e8e8e8; color:#666; white-space:nowrap; }
+  .status-badge.online { background:#e6f7ec; color:#0a8f3c; }
+  .status-badge.offline { background:#fdecea; color:#d64541; }
+  .mode-tip { font-size:11px; color:#999; margin-bottom:14px; min-height:14px; }
+  .scene-list { display:flex; flex-direction:column; gap:12px; }
+  .scene-card { background:#fff; border-radius:14px; padding:16px; box-shadow:0 2px 8px rgba(0,0,0,0.06); display:flex; align-items:center; gap:14px; }
+  .scene-icon { width:48px; height:48px; border-radius:12px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:24px; background:#eef1f6; }
+  .scene-info { flex:1; min-width:0; }
+  .scene-info .name { font-size:16px; font-weight:600; color:#1a1a2e; }
+  .scene-info .desc { font-size:12px; color:#888; margin-top:2px; }
+  .btn { border:none; border-radius:10px; padding:10px 16px; font-size:14px; font-weight:600; color:#fff; background:#07c160; cursor:pointer; flex-shrink:0; transition:opacity .15s; }
+  .btn:active { opacity:.7; }
+  .btn:disabled { background:#ccc; cursor:not-allowed; }
+  .scene-status { font-size:11px; padding:3px 8px; border-radius:12px; background:#f0f0f0; color:#999; margin-bottom:4px; display:inline-block; }
+  .scene-status.running { background:#e6f7ec; color:#0a8f3c; }
+  .toast { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,.75); color:#fff; padding:14px 22px; border-radius:12px; font-size:14px; display:none; z-index:99; max-width:80vw; text-align:center; }
+  .hint { margin-top:24px; text-align:center; font-size:12px; color:#aaa; line-height:1.7; }
 </style>
 </head>
 <body>
@@ -102,30 +33,30 @@
     <h1>互动程序控制台</h1>
     <div class="status-badge" id="deviceStatus">设备检测中…</div>
   </div>
+  <div class="mode-tip" id="modeTip"></div>
 
   <div class="scene-list" id="sceneList"></div>
-  <div class="hint">点「启动」后，现场电脑会自动打开对应的程序。<br>再次点其他程序，会自动先关闭当前程序。<br>本页面本地/云端通用（ws://localhost:3000/ws 或 wss://你的域名/ws）</div>
+  <div class="hint">点「启动」后，现场电脑会自动打开对应的程序。<br>再次点其他程序，会自动先关闭当前程序。</div>
   <div class="toast" id="toast"></div>
 
 <script>
-// ===== 程序清单（与 Unity 侧 CommandReceiver.cs 的 sceneMap 保持一致）=====
 const SCENES = [
-  { id: "1", name: "互动A", desc: "互动小鸟", img: "images/thumb-a.jpg" },
-  { id: "2", name: "互动B", desc: "呼风唤雨", img: "images/thumb-b.jpg" },
-  { id: "3", name: "互动C", desc: "梦想垂钓", img: "images/thumb-c.jpg" },
+  { id:"1", name:"互动A", desc:"互动小鸟", icon:"🐦" },
+  { id:"2", name:"互动B", desc:"呼风唤雨", icon:"🌧️" },
+  { id:"3", name:"互动C", desc:"梦想垂钓", icon:"🎣" },
 ];
 const DEVICE_ID = "1";
 
-// ===== 渲染列表 =====
 const listEl = document.getElementById("sceneList");
 const statusEl = document.getElementById("deviceStatus");
+const modeTipEl = document.getElementById("modeTip");
 const toastEl = document.getElementById("toast");
 
 SCENES.forEach((s) => {
   const card = document.createElement("div");
   card.className = "scene-card";
   card.innerHTML = `
-    <img class="scene-icon" src="${s.img}" alt="${s.name}">
+    <div class="scene-icon">${s.icon}</div>
     <div class="scene-info">
       <div class="name">${s.name}</div>
       <div class="desc">${s.desc}</div>
@@ -138,21 +69,30 @@ SCENES.forEach((s) => {
   listEl.appendChild(card);
 });
 
-// ===== WebSocket 连接 =====
+// ===== 连接策略：优先 WebSocket，失败则自动切换到 HTTP 轮询 =====
 let ws = null;
-let reconnectTimer = null;
+let polling = false;
+let pollTimer = null;
+let wsReady = false;
 
-function connect() {
-  // 自适应地址：本地 ws://localhost:3000/ws；云端(Render)自动 wss://<域名>/ws
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const url = `${proto}//${location.host || "localhost:3000"}/ws`;
+function connectWS() {
+  const proto = (location.protocol === "https:" ? "wss:" : "ws:");
+  const url = `${proto}//${location.host}/ws`;
+  modeTipEl.textContent = "正在尝试 WebSocket 连接…";
   ws = new WebSocket(url);
 
-  ws.onopen = () => {
-    setStatus(true);
-    console.log("[H5] 已连接中继");
-  };
+  const fallbackTimer = setTimeout(() => {
+    if (!wsReady) { enablePolling(); }
+  }, 3000);
 
+  ws.onopen = () => {
+    wsReady = true;
+    clearTimeout(fallbackTimer);
+    stopPolling();
+    modeTipEl.textContent = "";
+    setStatus(true);
+    console.log("[H5] WebSocket 已连接");
+  };
   ws.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
@@ -164,26 +104,38 @@ function connect() {
         if (msg.ok) showToast(`✅ 已启动「${name}」`);
         else showToast(`❌ 启动「${name}」失败：${(msg.error || "").split("\n")[0]}`);
       }
-      if (msg.type === "ack" && msg.ok === false) {
-        showToast("设备离线，命令未送达");
-      }
+      if (msg.type === "ack" && msg.ok === false) showToast("设备离线，命令未送达");
     } catch {}
   };
-
   ws.onclose = () => {
-    setStatus(false);
-    reconnectTimer = setTimeout(connect, 3000); // 自动重连
+    wsReady = false;
+    if (!polling) { setStatus(false); enablePolling(); }
   };
+  ws.onerror = () => { try { ws.close(); } catch {} };
+}
 
-  ws.onerror = () => ws.close();
+function enablePolling() {
+  if (polling) return;
+  polling = true;
+  modeTipEl.textContent = "WebSocket 不可用，已切换为 HTTP 轮询模式（功能正常）";
+  pollStatus();
+  pollTimer = setInterval(pollStatus, 2000);
+}
+function stopPolling() {
+  polling = false;
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+function pollStatus() {
+  fetch("/api/status")
+    .then((r) => r.json())
+    .then((d) => { setStatus(d.deviceOnline); setRunning(d.running); })
+    .catch(() => setStatus(false));
 }
 
 function setStatus(online) {
   statusEl.textContent = online ? "设备在线" : "设备离线";
   statusEl.className = "status-badge " + (online ? "online" : "offline");
 }
-
-// 更新各程序卡片的运行状态
 function setRunning(runningId) {
   document.querySelectorAll(".scene-status").forEach((el) => {
     const isRunning = el.dataset.status === runningId;
@@ -192,17 +144,29 @@ function setRunning(runningId) {
   });
 }
 
-// ===== 发送启动命令 =====
 function sendStart(sceneId) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    showToast("未连接到中继，请确认 server.js 已启动");
+  if (wsReady && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "start", deviceId: DEVICE_ID, sceneId }));
+    showToast(`已发送「${SCENES.find((s) => s.id === sceneId).name}」`);
     return;
   }
-  ws.send(JSON.stringify({ type: "start", deviceId: DEVICE_ID, sceneId }));
-  showToast(`已发送「${SCENES.find((s) => s.id === sceneId).name}」`);
+  if (polling) {
+    fetch("/api/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: DEVICE_ID, sceneId }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) showToast(`✅ 已发送「${SCENES.find((s) => s.id === sceneId).name}」`);
+        else showToast("❌ " + (d.error || "命令未送达"));
+      })
+      .catch(() => showToast("网络错误，命令未送达"));
+    return;
+  }
+  showToast("未连接到中继，请稍候重试");
 }
 
-// ===== Toast =====
 let toastTimer = null;
 function showToast(text) {
   toastEl.textContent = text;
@@ -211,7 +175,7 @@ function showToast(text) {
   toastTimer = setTimeout(() => { toastEl.style.display = "none"; }, 2000);
 }
 
-connect();
+connectWS();
 </script>
 </body>
 </html>
