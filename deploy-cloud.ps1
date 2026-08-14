@@ -22,7 +22,7 @@ function Get-File($relPath, $destPath){
     try {
       Log "下载 $relPath <- $u"
       Invoke-WebRequest -Uri $u -OutFile $destPath -TimeoutSec 30 -UseBasicParsing -ErrorAction Stop
-      if (Test-Path $destPath -and (Get-Item $destPath).Length -gt 100){
+      if ((Test-Path $destPath) -and ((Get-Item $destPath).Length -gt 100)){
         Log "  ✅ 成功 ($((Get-Item $destPath).Length) 字节)"
         return $true
       }
